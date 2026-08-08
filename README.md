@@ -112,15 +112,15 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 
 ## API endpoints
 
-```text
-GET /                         Health check
-GET /stocks/{symbol}          Stock profile and price history
-GET /stocks/{symbol}/news     Recent company news
-GET /stocks/{symbol}/analytics
-GET /stocks/{symbol}/fundamentals
-GET /compare                  Multi-company comparison
-GET /docs                     Interactive OpenAPI documentation
-```
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Health check |
+| `GET` | `/stocks/{symbol}` | Stock profile and price history |
+| `GET` | `/stocks/{symbol}/news` | Recent company news |
+| `GET` | `/stocks/{symbol}/analytics` | Quantitative analytics |
+| `GET` | `/stocks/{symbol}/fundamentals` | Fundamental metrics |
+| `GET` | `/compare` | Multi-company comparison |
+| `GET` | `/docs` | Interactive OpenAPI documentation |
 
 Example:
 
@@ -130,30 +130,19 @@ curl "http://127.0.0.1:8000/compare?symbols=NVDA,AMD,INTC&period=5y&frequency=1d
 
 ## Architecture
 
-```text
-finsight/
-├── backend/
-│   ├── app/
-│   │   ├── main.py              # FastAPI routes and CORS
-│   │   ├── schemas/             # Typed API response models
-│   │   └── services/            # Data fetching and calculations
-│   ├── tests/                   # API and financial calculation tests
-│   ├── pyproject.toml
-│   └── uv.lock
-├── frontend/
-│   ├── app/                     # Next.js shell and global styles
-│   ├── components/
-│   │   ├── comparison/          # Charts, sections, config and formatters
-│   │   ├── FundamentalCharts.tsx
-│   │   ├── NewsTimeline.tsx
-│   │   └── PriceChart.tsx
-│   ├── lib/api.ts               # API client and shared response types
-│   └── package.json
-├── docs/images/                 # README demo screenshots
-├── FinSight_Roadmap.md          # Product roadmap
-├── Record.md                    # Engineering record
-└── README.md
-```
+FinSight is split into a small API layer, a focused dashboard layer and a set of testable calculation services.
+
+| Path | Responsibility |
+| --- | --- |
+| `backend/app/main.py` | FastAPI routes, CORS and API lifecycle |
+| `backend/app/schemas/` | Typed response models for stocks, analytics, fundamentals, news and comparison |
+| `backend/app/services/` | Market-data access, financial calculations, ranking and research summaries |
+| `backend/tests/` | API behavior, ranking logic and financial calculation tests |
+| `frontend/app/` | Next.js app shell and global styling |
+| `frontend/components/` | Price, fundamentals, news and comparison dashboard components |
+| `frontend/components/comparison/` | Comparison charts, sections, formatters and metric configuration |
+| `frontend/lib/api.ts` | Frontend API client and shared response types |
+| `docs/images/` | README demo screenshots |
 
 ## Verification
 
