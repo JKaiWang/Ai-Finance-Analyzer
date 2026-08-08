@@ -1,4 +1,12 @@
-<div align="center">
+# FinSight
+
+Market data, fundamentals and peer comparison in one focused investment research workspace.
+
+![Next.js](https://img.shields.io/badge/Next.js-16.3.0-111827?style=flat-square&logo=next.js&logoColor=white)
+![React](https://img.shields.io/badge/React-19-0f172a?style=flat-square&logo=react&logoColor=61DAFB)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-0f766e?style=flat-square&logo=fastapi&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12+-1e3a8a?style=flat-square&logo=python&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-1e40af?style=flat-square&logo=typescript&logoColor=white)
 
 FinSight turns raw market data into readable research signals with transparent calculations, peer-relative scoring and focused visualizations.
 
@@ -8,17 +16,13 @@ FinSight turns raw market data into readable research signals with transparent c
 
 查詢股票後，可以在同一個工作區查看價格走勢、市場統計、量化分析、基本面與新聞。
 
-<p align="center">
-  <img src="./docs/images/stock-detail-demo.png" alt="FinSight stock research workspace" width="100%" />
-</p>
+![FinSight stock research workspace](./docs/images/stock-detail-demo.png)
 
 ### Peer comparison
 
 比較 2–5 家公司，查看 normalized price、six-factor radar、財務指標表與 raw-value heatmap。
 
-<p align="center">
-  <img src="./docs/images/comparison-demo.png" alt="FinSight peer comparison dashboard" width="100%" />
-</p>
+![FinSight peer comparison dashboard](./docs/images/comparison-demo.png)
 
 ## Features
 
@@ -112,15 +116,15 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 
 ## API endpoints
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/` | Health check |
-| `GET` | `/stocks/{symbol}` | Stock profile and price history |
-| `GET` | `/stocks/{symbol}/news` | Recent company news |
-| `GET` | `/stocks/{symbol}/analytics` | Quantitative analytics |
-| `GET` | `/stocks/{symbol}/fundamentals` | Fundamental metrics |
-| `GET` | `/compare` | Multi-company comparison |
-| `GET` | `/docs` | Interactive OpenAPI documentation |
+| Method  | Endpoint                          | Purpose                           |
+| ------- | --------------------------------- | --------------------------------- |
+| `GET` | `/`                             | Health check                      |
+| `GET` | `/stocks/{symbol}`              | Stock profile and price history   |
+| `GET` | `/stocks/{symbol}/news`         | Recent company news               |
+| `GET` | `/stocks/{symbol}/analytics`    | Quantitative analytics            |
+| `GET` | `/stocks/{symbol}/fundamentals` | Fundamental metrics               |
+| `GET` | `/compare`                      | Multi-company comparison          |
+| `GET` | `/docs`                         | Interactive OpenAPI documentation |
 
 Example:
 
@@ -130,19 +134,76 @@ curl "http://127.0.0.1:8000/compare?symbols=NVDA,AMD,INTC&period=5y&frequency=1d
 
 ## Architecture
 
-FinSight is split into a small API layer, a focused dashboard layer and a set of testable calculation services.
+FinSight is split into a small API layer, a focused dashboard layer and testable calculation services.
 
-| Path | Responsibility |
-| --- | --- |
-| `backend/app/main.py` | FastAPI routes, CORS and API lifecycle |
-| `backend/app/schemas/` | Typed response models for stocks, analytics, fundamentals, news and comparison |
-| `backend/app/services/` | Market-data access, financial calculations, ranking and research summaries |
-| `backend/tests/` | API behavior, ranking logic and financial calculation tests |
-| `frontend/app/` | Next.js app shell and global styling |
-| `frontend/components/` | Price, fundamentals, news and comparison dashboard components |
-| `frontend/components/comparison/` | Comparison charts, sections, formatters and metric configuration |
-| `frontend/lib/api.ts` | Frontend API client and shared response types |
-| `docs/images/` | README demo screenshots |
+### Repository structure
+
+```text
+finsight/
+├── backend/
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   ├── analytics.py
+│   │   │   ├── comparison.py
+│   │   │   ├── fundamentals.py
+│   │   │   ├── metrics.py
+│   │   │   ├── news.py
+│   │   │   └── stock.py
+│   │   └── services/
+│   │       ├── __init__.py
+│   │       ├── analytics_service.py
+│   │       ├── comparison_service.py
+│   │       ├── fundamentals_service.py
+│   │       ├── news_service.py
+│   │       ├── research_service.py
+│   │       └── stock_service.py
+│   ├── tests/
+│   │   ├── test_comparison_api.py
+│   │   ├── test_financial_calculations.py
+│   │   ├── test_research_service.py
+│   │   └── test_stocks_api.py
+│   ├── pyproject.toml
+│   └── uv.lock
+├── frontend/
+│   ├── app/
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── components/
+│   │   ├── comparison/
+│   │   │   ├── ComparisonCharts.tsx
+│   │   │   ├── ComparisonSections.tsx
+│   │   │   ├── config.ts
+│   │   │   └── formatters.ts
+│   │   ├── ComparisonDashboard.tsx
+│   │   ├── FundamentalCharts.tsx
+│   │   ├── NewsTimeline.tsx
+│   │   └── PriceChart.tsx
+│   ├── lib/
+│   │   └── api.ts
+│   ├── eslint.config.mjs
+│   ├── next.config.ts
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── postcss.config.mjs
+│   └── tsconfig.json
+├── docs/
+│   └── images/
+│       ├── comparison-demo.png
+│       └── stock-detail-demo.png
+└── README.md
+```
+
+| Directory                           | Responsibility                         |
+| ----------------------------------- | -------------------------------------- |
+| `backend/app/schemas/`            | Typed API response models              |
+| `backend/app/services/`           | Data access and financial calculations |
+| `backend/tests/`                  | API, ranking and formula tests         |
+| `frontend/components/comparison/` | Peer comparison charts and sections    |
+| `docs/images/`                    | README demo screenshots                |
 
 ## Verification
 
