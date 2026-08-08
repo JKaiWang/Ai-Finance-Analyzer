@@ -5,9 +5,10 @@ from datetime import date, timedelta
 from typing import Any
 
 import pandas as pd
-import yfinance as yf
+import yfinance as yf  # Compatibility alias for provider-level test doubles.
 
-from app.services.stock_service import StockNotFound, get_stock_data
+from app.services.data_provider import get_market_data_provider, retry_call
+from app.services.stock_service import DATA_SOURCE, StockNotFound, get_stock_data
 
 logger = logging.getLogger("finsight.analytics_service")
 
@@ -82,6 +83,7 @@ def _daily_returns(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _period_return(history: list[dict[str, Any]], months: int) -> float | None:
+    """Calculate cumulative return from the first observation at the cutoff."""
     if len(history) < 2:
         return None
 
@@ -104,6 +106,7 @@ def _return_from_date(history: list[dict[str, Any]], cutoff: date) -> float | No
 
 
 def _annualized_return(history: list[dict[str, Any]]) -> float | None:
+    """Annualize total price return using elapsed calendar years."""
     if len(history) < 2 or history[0]["close"] <= 0:
         return None
     years = (history[-1]["date"] - history[0]["date"]).days / 365.25
@@ -131,6 +134,7 @@ def _moving_averages(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _volatility(returns: list[float]) -> float | None:
+    """Annualize sample daily standard deviation with sqrt(252)."""
     if len(returns) < 2:
         return None
     return statistics.stdev(returns) * math.sqrt(TRADING_DAYS_PER_YEAR)
@@ -192,8 +196,12 @@ def _benchmark_metrics(
 ) -> dict[str, Any] | None:
     benchmark_symbol = benchmark_symbol or _benchmark_symbol(symbol)
     try:
-        history = yf.Ticker(benchmark_symbol).history(
-            period="5y", interval="1d", auto_adjust=False
+        benchmark_ticker = get_market_data_provider().ticker(benchmark_symbol)
+        history = retry_call(
+            lambda: benchmark_ticker.history(
+                period="5y", interval="1d", auto_adjust=False, timeout=15
+            ),
+            operation_name=f"retrieve benchmark history for {benchmark_symbol}",
         )
     except Exception as exc:  # noqa: BLE001 - upstream errors vary by yfinance endpoint.
         logger.warning("Benchmark unavailable for %s: %s", symbol, exc)
@@ -332,9 +340,32 @@ def get_stock_analytics(
     cagr = _annualized_return(history)
     maximum_drawdown = _maximum_drawdown(history)
     benchmark_data = _benchmark_metrics(normalized_symbol, history, cagr, benchmark)
+    missing_fields = [
+        name
+        for name, value in {
+            "annualized_volatility": _volatility(numeric_returns),
+            "maximum_drawdown": maximum_drawdown,
+            "sharpe_ratio": _sharpe_ratio(numeric_returns),
+            "downside_volatility": _downside_volatility(numeric_returns),
+            "sortino_ratio": _sortino_ratio(numeric_returns),
+            "calmar_ratio": _calmar_ratio(cagr, maximum_drawdown),
+            "cagr": cagr,
+            "benchmark": benchmark_data,
+        }.items()
+        if value is None
+    ]
 
     return {
         "symbol": normalized_symbol,
+        "data_status": {
+            "status": "partial" if missing_fields else "available",
+            "source": DATA_SOURCE,
+            "as_of": end_date,
+            "message": "部分量化指標因可用資料不足而無法計算。"
+            if missing_fields
+            else None,
+            "missing_fields": missing_fields,
+        },
         "daily_returns": daily_returns,
         "period_returns": {
             "one_week": _return_from_date(history, end_date - timedelta(days=7)),

@@ -2,6 +2,8 @@ from datetime import date as date_type
 
 from pydantic import BaseModel, Field
 
+from app.schemas.metrics import DataStatus
+
 
 class DailyReturnRecord(BaseModel):
     date: date_type = Field(description="交易日期。")
@@ -40,6 +42,7 @@ class BenchmarkComparison(BaseModel):
 
 class AnalyticsResponse(BaseModel):
     symbol: str = Field(description="股票代號。")
+    data_status: DataStatus = Field(description="量化資料來源與可用狀態。")
     daily_returns: list[DailyReturnRecord] = Field(description="每日報酬率序列。")
     period_returns: PeriodReturns = Field(description="不同期間的累積報酬率。")
     annualized_volatility: float | None = Field(

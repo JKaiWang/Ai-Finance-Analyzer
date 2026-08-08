@@ -6,7 +6,8 @@ from typing import Any
 import pandas as pd
 import yfinance as yf
 
-from app.services.stock_service import StockDataUnavailable, StockNotFound
+from app.services.data_provider import get_market_data_provider
+from app.services.stock_service import DATA_SOURCE, StockDataUnavailable, StockNotFound
 
 logger = logging.getLogger("finsight.fundamentals_service")
 
@@ -161,6 +162,7 @@ def _cash_flow(table: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def _growth(current: float | None, previous: float | None) -> float | None:
+    """Return period-over-period growth: (current / previous) - 1."""
     if current is None or previous in (None, 0):
         return None
     return current / previous - 1
@@ -171,6 +173,7 @@ def _latest(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _ratio(numerator: float | None, denominator: float | None) -> float | None:
+    """Return a ratio while preserving unavailable or zero-denominator inputs."""
     if numerator is None or denominator in (None, 0):
         return None
     return numerator / denominator
@@ -181,6 +184,7 @@ def _info_value(info: dict[str, Any], key: str) -> float | int | None:
 
 
 def _average(current: float | None, previous: float | None) -> float | None:
+    """Use the two-period average when available for return-on-capital metrics."""
     if current is None:
         return None
     if previous is None:
@@ -189,12 +193,19 @@ def _average(current: float | None, previous: float | None) -> float | None:
 
 
 def get_fundamentals(symbol: str) -> dict[str, Any]:
+    """Build standard financial ratios without converting missing inputs to zero.
+
+    ROIC uses NOPAT / invested capital, where NOPAT is EBIT after the observed
+    effective tax rate and invested capital is average debt + average equity -
+    average cash. FCF uses the provider's reported value or operating cash flow
+    plus capital expenditure when both are available.
+    """
     normalized_symbol = symbol.strip().upper()
     if not normalized_symbol:
         raise StockNotFound("Stock symbol cannot be empty")
 
     try:
-        ticker = yf.Ticker(normalized_symbol)
+        ticker = get_market_data_provider().ticker(normalized_symbol)
     except Exception as exc:
         logger.exception(
             "Failed to initialize fundamentals ticker for %s", normalized_symbol
@@ -260,9 +271,42 @@ def get_fundamentals(symbol: str) -> dict[str, Any]:
     quick_assets = (
         cash + receivables if cash is not None and receivables is not None else None
     )
+    calculated_values = {
+        "revenue": revenue,
+        "gross_profit": gross_profit,
+        "operating_income": operating_income,
+        "net_income": net_income,
+        "free_cash_flow": free_cash_flow,
+        "roic": _ratio(nopat, invested_capital),
+        "current_ratio": _ratio(
+            current_balance.get("current_assets"),
+            current_balance.get("current_liabilities"),
+        ),
+        "price_to_earnings": _info_value(info, "trailingPE"),
+    }
+    missing_fields = [
+        name for name, value in calculated_values.items() if value is None
+    ]
+    latest_period = next(
+        (
+            record.get("period")
+            for record in (current_income, current_balance, current_cash_flow)
+            if record.get("period") is not None
+        ),
+        None,
+    )
 
     return {
         "symbol": normalized_symbol,
+        "data_status": {
+            "status": "partial" if missing_fields else "available",
+            "source": DATA_SOURCE,
+            "as_of": latest_period,
+            "message": "部分財務指標因上游資料缺漏而無法計算。"
+            if missing_fields
+            else None,
+            "missing_fields": missing_fields,
+        },
         "income_statement": income,
         "balance_sheet": balance,
         "cash_flow": cash_flow,

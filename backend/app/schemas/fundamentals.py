@@ -2,6 +2,8 @@ from datetime import date as date_type
 
 from pydantic import BaseModel, Field
 
+from app.schemas.metrics import DataStatus
+
 
 class IncomeStatementRecord(BaseModel):
     period: date_type = Field(description="財務期間。")
@@ -99,6 +101,7 @@ class OwnershipMetrics(BaseModel):
 
 class FundamentalsResponse(BaseModel):
     symbol: str = Field(description="股票代號。")
+    data_status: DataStatus = Field(description="財務資料來源與可用狀態。")
     income_statement: list[IncomeStatementRecord] = Field(
         description="年度損益表資料。"
     )

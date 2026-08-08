@@ -9,6 +9,7 @@ import httpx
 from dotenv import load_dotenv
 
 from app.schemas.news import NewsCategory, NewsSentiment
+from app.services.data_provider import TTLCache, _env_float, retry_call
 from app.services.stock_service import StockDataUnavailable, StockNotFound
 
 logger = logging.getLogger("finsight.news_service")
@@ -18,6 +19,10 @@ load_dotenv()
 FINNHUB_URL = "https://finnhub.io/api/v1/company-news"
 SOURCE_NAME = "Finnhub"
 LOOKBACK_DAYS = 30
+NEWS_CACHE = TTLCache(
+    ttl_seconds=_env_float("FINSIGHT_NEWS_CACHE_TTL", 900),
+    max_entries=256,
+)
 
 _CATEGORY_KEYWORDS: dict[NewsCategory, tuple[str, ...]] = {
     NewsCategory.EARNINGS: (
@@ -220,26 +225,38 @@ def get_news(symbol: str) -> dict[str, Any]:
             "symbol": normalized_symbol,
             "provider": SOURCE_NAME,
             "available": False,
+            "data_status": {
+                "status": "unavailable",
+                "source": SOURCE_NAME,
+                "message": "尚未設定 FINNHUB_API_KEY。",
+            },
             "message": "尚未設定 FINNHUB_API_KEY。",
             "articles": [],
         }
 
     end_date = date.today()
     start_date = end_date - timedelta(days=LOOKBACK_DAYS)
+    cache_key = f"{normalized_symbol}:{start_date.isoformat()}:{end_date.isoformat()}"
+    cached = NEWS_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     try:
-        response = httpx.get(
-            FINNHUB_URL,
-            params={
-                "symbol": normalized_symbol,
-                "from": start_date.isoformat(),
-                "to": end_date.isoformat(),
-                "token": api_key,
-            },
-            timeout=10.0,
+        response = retry_call(
+            lambda: httpx.get(
+                FINNHUB_URL,
+                params={
+                    "symbol": normalized_symbol,
+                    "from": start_date.isoformat(),
+                    "to": end_date.isoformat(),
+                    "token": api_key,
+                },
+                timeout=_env_float("FINSIGHT_HTTP_TIMEOUT_SECONDS", 10.0),
+            ),
+            operation_name=f"retrieve news for {normalized_symbol}",
         )
         response.raise_for_status()
         payload = response.json()
-    except (httpx.HTTPError, ValueError) as exc:
+    except (httpx.HTTPError, RuntimeError, ValueError) as exc:
         logger.exception("Finnhub news request failed for %s", normalized_symbol)
         raise StockDataUnavailable("Failed to retrieve company news") from exc
 
@@ -251,6 +268,11 @@ def get_news(symbol: str) -> dict[str, Any]:
             "symbol": normalized_symbol,
             "provider": SOURCE_NAME,
             "available": True,
+            "data_status": {
+                "status": "partial",
+                "source": SOURCE_NAME,
+                "message": "新聞來源回傳格式無法辨識。",
+            },
             "message": "新聞來源回傳格式無法辨識。",
             "articles": [],
         }
@@ -262,10 +284,18 @@ def get_news(symbol: str) -> dict[str, Any]:
         for article in [_normalize_article(item)]
         if article is not None
     ]
-    return {
+    result = {
         "symbol": normalized_symbol,
         "provider": SOURCE_NAME,
         "available": True,
+        "data_status": {
+            "status": "available" if normalized else "partial",
+            "source": SOURCE_NAME,
+            "as_of": end_date,
+            "message": "目前查無符合條件的新聞。" if not normalized else None,
+        },
         "message": None,
         "articles": _deduplicate(normalized),
     }
+    NEWS_CACHE.set(cache_key, result)
+    return result

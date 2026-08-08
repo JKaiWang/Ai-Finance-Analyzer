@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { ArrowUpRight, BarChart3, LoaderCircle, Search } from "lucide-react";
 
 import FundamentalCharts from "@/components/FundamentalCharts";
@@ -127,6 +127,58 @@ function ErrorState({ message, onRetry }: ErrorStateProps) {
   );
 }
 
+function DataStatusBanner({
+  status,
+  source,
+  asOf,
+  message,
+  missingFields,
+}: {
+  status: "available" | "partial" | "unavailable";
+  source: string;
+  asOf: string | null;
+  message: string | null;
+  missingFields: string[];
+}) {
+  if (status === "available" && !message) {
+    return (
+      <p className="data-status data-status-available">
+        來源：{source}{asOf ? ` · 截至 ${asOf}` : ""}
+      </p>
+    );
+  }
+
+  const label = status === "unavailable" ? "資料不可用" : "資料不完整";
+  return (
+    <div className={`data-status data-status-${status}`} role="status">
+      <strong>{label}</strong>
+      <span>{message ?? "部分欄位目前沒有可用資料。"}</span>
+      <small>
+        來源：{source}{asOf ? ` · 截至 ${asOf}` : ""}
+        {missingFields.length > 0 ? ` · 缺少 ${missingFields.length} 個欄位` : ""}
+      </small>
+    </div>
+  );
+}
+
+function LoadingWorkspace({ symbol }: { symbol: string }) {
+  return (
+    <section className="panel loading-workspace" aria-live="polite">
+      <div className="loading-heading">
+        <LoaderCircle className="spin" size={16} aria-hidden="true" />
+        <div>
+          <h2>正在讀取 {symbol} 的市場資料</h2>
+          <p>正在整理價格、量化指標、基本面與新聞。</p>
+        </div>
+      </div>
+      <div className="loading-skeleton-grid" aria-hidden="true">
+        <span /><span /><span /><span />
+      </div>
+      <div className="loading-skeleton-chart" aria-hidden="true" />
+    </section>
+  );
+}
+
 function AnalyticsPanel({ analytics }: { analytics: AnalyticsResponse }) {
   const benchmark = analytics.benchmark;
   const periodCards = [
@@ -142,6 +194,13 @@ function AnalyticsPanel({ analytics }: { analytics: AnalyticsResponse }) {
         <h2 id="analytics-heading">量化分析</h2>
         <span>根據每日收盤價計算</span>
       </div>
+      <DataStatusBanner
+        status={analytics.data_status.status}
+        source={analytics.data_status.source}
+        asOf={analytics.data_status.as_of}
+        message={analytics.data_status.message}
+        missingFields={analytics.data_status.missing_fields}
+      />
       <div className="analytics-grid">
         {periodCards.map(([label, value]) => (
           <div className="analytics-metric" key={label}>
@@ -196,6 +255,13 @@ function FundamentalsPanel({ fundamentals }: { fundamentals: FundamentalsRespons
           <h2 id="fundamental-metrics-heading">基本面指標</h2>
           <span>最新可用期間</span>
         </div>
+        <DataStatusBanner
+          status={fundamentals.data_status.status}
+          source={fundamentals.data_status.source}
+          asOf={fundamentals.data_status.as_of}
+          message={fundamentals.data_status.message}
+          missingFields={fundamentals.data_status.missing_fields}
+        />
         <div className="fundamental-metric-grid">
           {metrics.map(([label, value, signedValue]) => (
             <div className="fundamental-metric" key={label}>
@@ -218,6 +284,13 @@ function NewsPanel({ news }: { news: NewsResponse }) {
         <h2 id="news-heading">公司新聞</h2>
         <span>{news.provider} · 近 30 天</span>
       </div>
+      <DataStatusBanner
+        status={news.data_status.status}
+        source={news.data_status.source}
+        asOf={news.data_status.as_of}
+        message={news.data_status.message}
+        missingFields={news.data_status.missing_fields}
+      />
       {!news.available || news.articles.length === 0 ? (
         <div className="news-empty">
           <p>{news.message ?? "目前沒有可用的公司新聞。"}</p>
@@ -391,6 +464,15 @@ export default function Home() {
           symbol: normalizedSymbol,
           provider: "Finnhub",
           available: false,
+          data_status: {
+            status: "unavailable",
+            source: "Finnhub",
+            as_of: null,
+            message: newsError instanceof StockApiError
+              ? newsError.message
+              : "目前無法取得公司新聞。",
+            missing_fields: [],
+          },
           message: newsError instanceof StockApiError
             ? newsError.message
             : "目前無法取得公司新聞。",
@@ -401,6 +483,11 @@ export default function Home() {
       setAnalytics(analyticsResult);
       setFundamentals(fundamentalsResult);
       setNews(newsResult);
+      window.history.replaceState(
+        null,
+        "",
+        `?symbol=${encodeURIComponent(normalizedSymbol)}`,
+      );
     } catch (caughtError: unknown) {
       if (caughtError instanceof StockApiError) {
         setError(caughtError.message);
@@ -421,6 +508,15 @@ export default function Home() {
     void runSearch(query);
   }
 
+  useEffect(() => {
+    const symbol = new URLSearchParams(window.location.search).get("symbol");
+    if (symbol) {
+      window.setTimeout(() => void runSearch(symbol), 0);
+    }
+    // The initial URL is the only external trigger for this client workspace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -440,7 +536,7 @@ export default function Home() {
             <p className="eyebrow">市場研究 / 工作台</p>
             <h1 id="page-title">深入了解一家公司。</h1>
             <p className="intro-copy">
-              在一個安靜清晰的工作台，整理公開公司的重要資料。從股票代號開始。
+              從股票代號開始。
             </p>
           </div>
 
@@ -462,7 +558,7 @@ export default function Home() {
               </button>
             </form>
             <div className="suggestions" aria-label="Suggested symbols">
-              <span className="eyebrow" style={{ margin: "3px 4px 0 0" }}>試試</span>
+              <span className="eyebrow" style={{ margin: "1px 4px 0 0" }}>try</span>
               {suggestions.map((suggestion) => (
                 <button className="suggestion" type="button" key={suggestion} onClick={() => void runSearch(suggestion)}>
                   {suggestion}
@@ -474,15 +570,7 @@ export default function Home() {
 
         <ComparisonDashboard />
 
-        {isLoading && (
-          <section className="panel empty-state" aria-live="polite">
-            <div className="empty-inner">
-              <LoaderCircle className="empty-icon spin" strokeWidth={1} aria-hidden="true" />
-              <h2>正在讀取市場資料</h2>
-              <p>正在取得 {lastQuery} 最新可用的資訊。</p>
-            </div>
-          </section>
-        )}
+        {isLoading && <LoadingWorkspace symbol={lastQuery} />}
         {!isLoading && error && <ErrorState message={error} onRetry={() => void runSearch(lastQuery)} />}
         {!isLoading && !error && stock && analytics && fundamentals && news && (
           <StockWorkspace

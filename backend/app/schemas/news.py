@@ -3,6 +3,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from app.schemas.metrics import DataStatus
+
 
 class NewsCategory(StrEnum):
     EARNINGS = "Earnings"
@@ -35,6 +37,7 @@ class NewsArticle(BaseModel):
 
 class NewsResponse(BaseModel):
     symbol: str = Field(description="股票代號。")
+    data_status: DataStatus = Field(description="新聞資料來源與可用狀態。")
     provider: str = Field(description="新聞資料來源。")
     available: bool = Field(description="新聞服務是否已設定並成功取得資料。")
     message: str | None = Field(default=None, description="資料來源狀態訊息。")

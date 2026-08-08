@@ -1,16 +1,29 @@
 import logging
 import math
+import re
 from datetime import date
 from typing import Any
 
 import pandas as pd
-import yfinance as yf
+import yfinance as yf  # noqa: F401 - compatibility alias for test doubles.
+
+from app.services.data_provider import (
+    TTLCache,
+    _env_float,
+    get_market_data_provider,
+    retry_call,
+)
 
 logger = logging.getLogger("finsight.stock_service")
 
 SUPPORTED_HISTORY_PERIODS = ("1y", "5y", "10y")
 SUPPORTED_HISTORY_INTERVALS = ("1d", "1wk", "1mo")
 DATA_SOURCE = "Yahoo Finance via yfinance"
+SYMBOL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,14}$")
+STOCK_CACHE = TTLCache(
+    ttl_seconds=_env_float("FINSIGHT_STOCK_CACHE_TTL", 300),
+    max_entries=256,
+)
 
 
 class StockNotFound(Exception):
@@ -81,6 +94,8 @@ def get_stock_data(
 
     if not normalized_symbol:
         raise StockNotFound("Stock symbol cannot be empty")
+    if not SYMBOL_PATTERN.fullmatch(normalized_symbol):
+        raise ValueError(f"Invalid stock symbol: {normalized_symbol}")
     if period not in SUPPORTED_HISTORY_PERIODS:
         raise ValueError(
             f"Unsupported history period: {period}. "
@@ -92,10 +107,15 @@ def get_stock_data(
             f"Choose from {', '.join(SUPPORTED_HISTORY_INTERVALS)}."
         )
 
+    cache_key = f"{normalized_symbol}:{period}:{interval}"
+    cached = STOCK_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     logger.info("Fetching market data for %s", normalized_symbol)
 
     try:
-        ticker = yf.Ticker(normalized_symbol)
+        ticker = get_market_data_provider().ticker(normalized_symbol)
     except Exception as exc:
         logger.exception(
             "Failed to initialize yfinance ticker for %s", normalized_symbol
@@ -105,7 +125,15 @@ def get_stock_data(
         ) from exc
 
     try:
-        history = ticker.history(period=period, interval=interval, auto_adjust=False)
+        history = retry_call(
+            lambda: ticker.history(
+                period=period,
+                interval=interval,
+                auto_adjust=False,
+                timeout=15,
+            ),
+            operation_name=f"retrieve history for {normalized_symbol}",
+        )
     except Exception as exc:
         logger.exception("Failed to retrieve history for %s", normalized_symbol)
         raise StockDataUnavailable(
@@ -164,7 +192,7 @@ def get_stock_data(
 
     latest_close = price_history[-1]["close"]
 
-    return {
+    result = {
         "symbol": normalized_symbol,
         "company_name": _safe_str(info.get("longName"))
         or _safe_str(info.get("shortName")),
@@ -206,3 +234,5 @@ def get_stock_data(
             },
         },
     }
+    STOCK_CACHE.set(cache_key, result)
+    return result

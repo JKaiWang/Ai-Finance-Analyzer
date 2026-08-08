@@ -103,8 +103,8 @@ def test_unknown_stock_symbol_returns_404() -> None:
     with patch("app.services.stock_service.yf.Ticker", return_value=ticker):
         response = client.get("/stocks/NOT_A_SYMBOL")
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "No market data found for NOT_A_SYMBOL"
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid stock symbol: NOT_A_SYMBOL"
 
 
 def test_stock_history_period_and_metadata() -> None:
@@ -381,6 +381,13 @@ def test_stock_news_without_api_key_returns_config_state() -> None:
         "symbol": "NVDA",
         "provider": "Finnhub",
         "available": False,
+        "data_status": {
+            "status": "unavailable",
+            "source": "Finnhub",
+            "as_of": None,
+            "message": "尚未設定 FINNHUB_API_KEY。",
+            "missing_fields": [],
+        },
         "message": "尚未設定 FINNHUB_API_KEY。",
         "articles": [],
     }

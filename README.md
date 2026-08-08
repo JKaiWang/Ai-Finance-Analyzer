@@ -1,3 +1,4 @@
+
 # FinSight
 
 Market data, fundamentals and peer comparison in one focused investment research workspace.
@@ -114,6 +115,10 @@ If the backend runs elsewhere:
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 
+Backend resilience settings are documented in `backend/.env.example`, including
+upstream retries, request timeouts, cache TTLs, allowed frontend origins and the
+process-local rate limit.
+
 ## API endpoints
 
 | Method  | Endpoint                          | Purpose                           |
@@ -191,9 +196,13 @@ finsight/
 │   ├── postcss.config.mjs
 │   └── tsconfig.json
 ├── docs/
+│   ├── API.md
 │   └── images/
 │       ├── comparison-demo.png
 │       └── stock-detail-demo.png
+├── CHANGELOG.md
+├── FinSight_Roadmap.md
+├── Record.md
 └── README.md
 ```
 
@@ -229,7 +238,9 @@ FinSight uses market and financial data from upstream providers through `yfinanc
 - Roadmap: [`FinSight_Roadmap.md`](./FinSight_Roadmap.md)
 - Engineering record: [`Record.md`](./Record.md)
 - Demo images: [`docs/images/`](./docs/images/)
+- API notes: [`docs/API.md`](./docs/API.md)
+- Changelog: [`CHANGELOG.md`](./CHANGELOG.md)
 
 ## License
 
-No license has been declared yet.
+No license has been declared yet. Add a project license before public distribution.

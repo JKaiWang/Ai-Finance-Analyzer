@@ -1,8 +1,15 @@
 import logging
+import os
+import threading
+import time
+from collections import defaultdict
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Path, Query
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.schemas.analytics import AnalyticsResponse
 from app.schemas.comparison import ComparisonResponse
@@ -25,6 +32,46 @@ logging.basicConfig(
 )
 logger = logging.getLogger("finsight.api")
 
+load_dotenv()
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Simple process-local guard against accidental request floods."""
+
+    def __init__(self, app) -> None:
+        super().__init__(app)
+        self.limit = _env_int("FINSIGHT_RATE_LIMIT_REQUESTS", 120)
+        self.window = _env_int("FINSIGHT_RATE_LIMIT_WINDOW_SECONDS", 60)
+        self.requests: defaultdict[str, list[float]] = defaultdict(list)
+        self.lock = threading.Lock()
+
+    async def dispatch(self, request: Request, call_next):
+        now = time.monotonic()
+        client = request.client.host if request.client else "unknown"
+        with self.lock:
+            recent = [
+                timestamp
+                for timestamp in self.requests[client]
+                if now - timestamp < self.window
+            ]
+            if len(recent) >= self.limit:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests. Please try again later."},
+                    headers={"Retry-After": str(self.window)},
+                )
+            recent.append(now)
+            self.requests[client] = recent
+        return await call_next(request)
+
+
 app = FastAPI(
     title="FinSight API",
     description="Backend API for an AI-powered investment research platform.",
@@ -37,13 +84,23 @@ app = FastAPI(
     ],
 )
 
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "FINSIGHT_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=False,
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+app.add_middleware(RateLimitMiddleware)
 
 
 @app.get(

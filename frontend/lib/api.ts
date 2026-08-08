@@ -7,6 +7,14 @@ export type PriceRecord = {
   volume: number;
 };
 
+export type DataStatus = {
+  status: "available" | "partial" | "unavailable";
+  source: string;
+  as_of: string | null;
+  message: string | null;
+  missing_fields: string[];
+};
+
 export type StockResponse = {
   symbol: string;
   company_name: string | null;
@@ -30,6 +38,7 @@ export type MovingAverageRecord = {
 
 export type AnalyticsResponse = {
   symbol: string;
+  data_status: DataStatus;
   daily_returns: Array<{ date: string; daily_return: number | null }>;
   period_returns: {
     one_month: number | null;
@@ -51,6 +60,7 @@ export type AnalyticsResponse = {
 
 export type FundamentalsResponse = {
   symbol: string;
+  data_status: DataStatus;
   income_statement: Array<{
     period: string;
     revenue: number | null;
@@ -108,6 +118,7 @@ export type NewsArticle = {
 
 export type NewsResponse = {
   symbol: string;
+  data_status: DataStatus;
   provider: string;
   available: boolean;
   message: string | null;

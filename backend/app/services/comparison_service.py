@@ -1,3 +1,4 @@
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Any
@@ -14,6 +15,7 @@ from app.services.stock_service import (
 MAX_COMPARISON_SYMBOLS = 5
 VALID_PERIODS = ("1y", "5y", "10y")
 VALID_FREQUENCIES = ("1d", "1wk", "1mo")
+SYMBOL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,14}$")
 
 
 def parse_symbols(raw_symbols: str) -> list[str]:
@@ -21,6 +23,8 @@ def parse_symbols(raw_symbols: str) -> list[str]:
     for raw_symbol in raw_symbols.split(","):
         symbol = raw_symbol.strip().upper()
         if symbol and symbol not in symbols:
+            if not SYMBOL_PATTERN.fullmatch(symbol):
+                raise ValueError(f"股票代號格式不正確：{symbol}")
             symbols.append(symbol)
 
     if len(symbols) < 2:
@@ -38,6 +42,7 @@ def _latest_value(records: list[dict[str, Any]], key: str) -> float | None:
 
 
 def _price_to_earnings(price: float | None, eps: float | None) -> float | None:
+    """Return trailing P/E only for positive EPS; negative EPS is not meaningful."""
     if price is None or eps is None or eps <= 0:
         return None
     return price / eps

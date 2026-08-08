@@ -22,6 +22,13 @@ def test_revenue_growth_and_current_ratio_use_standard_ratios() -> None:
     assert _ratio(1_200.0, 0.0) is None
 
 
+def test_growth_and_ratio_require_usable_inputs() -> None:
+    assert _growth(None, 100.0) is None
+    assert _growth(100.0, None) is None
+    assert _ratio(100.0, None) is None
+    assert _ratio(100.0, 0.0) is None
+
+
 def test_price_to_earnings_rejects_negative_or_missing_eps() -> None:
     assert _price_to_earnings(100.0, 5.0) == 20.0
     assert _price_to_earnings(100.0, -5.0) is None
@@ -46,6 +53,11 @@ def test_annualized_volatility_uses_sample_daily_std_and_sqrt_252() -> None:
     assert _volatility(returns) == expected
 
 
+def test_annualized_volatility_requires_two_observations() -> None:
+    assert _volatility([]) is None
+    assert _volatility([0.01]) is None
+
+
 def test_cagr_uses_elapsed_years() -> None:
     history = [
         {"date": date(2020, 1, 1), "close": 100.0},
@@ -54,6 +66,20 @@ def test_cagr_uses_elapsed_years() -> None:
 
     assert _annualized_return(history) is not None
     assert 0.14 < _annualized_return(history) < 0.15
+
+
+def test_annualized_return_rejects_insufficient_or_non_positive_prices() -> None:
+    assert _annualized_return([]) is None
+    assert _annualized_return([{"date": date(2025, 1, 1), "close": 100.0}]) is None
+    assert (
+        _annualized_return(
+            [
+                {"date": date(2025, 1, 1), "close": 0.0},
+                {"date": date(2026, 1, 1), "close": 100.0},
+            ]
+        )
+        is None
+    )
 
 
 def test_roic_uses_after_tax_operating_income_over_invested_capital() -> None:
