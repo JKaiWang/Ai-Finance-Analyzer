@@ -1,0 +1,13 @@
+backend/.env
+backend/.venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.ruff_cache/
+frontend/node_modules/
+frontend/.next/
+.DS_Store
+/.ruff_cache/
+FinSight_RoadMap.md
+Record.md
+Figures
+Figure/*
