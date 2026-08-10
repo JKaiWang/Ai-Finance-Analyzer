@@ -27,17 +27,93 @@ import {
   ResearchSummary,
   SectionTable,
 } from "./comparison/ComparisonSections";
+import {
+  COMPARISON_ALERTS_KEY,
+  SAVED_COMPARISONS_KEY,
+  csvForComparison,
+  matchingAlerts,
+  shareUrl,
+  type ComparisonAlert,
+  type SavedComparison,
+} from "@/lib/comparison-tools";
 
 export default function ComparisonDashboard() {
-  const [selected, setSelected] = useState<string[]>(["NVDA", "AMD", "INTC"]);
+  const [selected, setSelected] = useState<string[]>(() => {
+    if (typeof window === "undefined") return ["NVDA", "AMD", "INTC"];
+    return new URLSearchParams(window.location.search).get("symbols")?.split(",").filter(Boolean).slice(0, 5) ?? ["NVDA", "AMD", "INTC"];
+  });
   const [custom, setCustom] = useState("");
-  const [period, setPeriod] = useState("5y");
-  const [frequency, setFrequency] = useState("1d");
-  const [benchmark, setBenchmark] = useState("");
+  const [period, setPeriod] = useState(() => typeof window === "undefined" ? "5y" : new URLSearchParams(window.location.search).get("period") ?? "5y");
+  const [frequency, setFrequency] = useState(() => typeof window === "undefined" ? "1d" : new URLSearchParams(window.location.search).get("frequency") ?? "1d");
+  const [benchmark, setBenchmark] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("benchmark") ?? "");
   const [revenueMode, setRevenueMode] = useState<RevenueMode>("indexed");
   const [result, setResult] = useState<ComparisonResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState<SavedComparison[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem(SAVED_COMPARISONS_KEY) ?? "[]") as SavedComparison[]; } catch { return []; }
+  });
+  const [savedId, setSavedId] = useState("");
+  const [alerts, setAlerts] = useState<ComparisonAlert[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem(COMPARISON_ALERTS_KEY) ?? "[]") as ComparisonAlert[]; } catch { return []; }
+  });
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function persistSaved(next: SavedComparison[]) {
+    setSaved(next); localStorage.setItem(SAVED_COMPARISONS_KEY, JSON.stringify(next));
+  }
+
+  function saveComparison() {
+    const item: SavedComparison = { id: crypto.randomUUID(), name: selected.join(" / "), symbols: selected, period, frequency, benchmark, createdAt: new Date().toISOString() };
+    persistSaved([item, ...saved]); setNotice(`已保存比較：${item.name}`);
+  }
+
+  function loadComparison(item: SavedComparison) {
+    setSavedId(item.id); setSelected(item.symbols); setPeriod(item.period); setFrequency(item.frequency); setBenchmark(item.benchmark); setNotice(`已載入：${item.name}`);
+  }
+
+  function renameSaved() {
+    const item = saved.find((value) => value.id === savedId); if (!item) return;
+    const name = window.prompt("新的比較名稱", item.name)?.trim(); if (!name) return;
+    persistSaved(saved.map((value) => value.id === savedId ? { ...value, name } : value)); setNotice(`已重新命名：${name}`);
+  }
+
+  function deleteSaved() {
+    if (!savedId || !window.confirm("刪除這個已保存的比較？")) return;
+    persistSaved(saved.filter((value) => value.id !== savedId)); setSavedId(""); setNotice("已刪除保存的比較。");
+  }
+
+  function exportCsv() {
+    if (!result) return;
+    const blob = new Blob(["\ufeff" + csvForComparison(result)], { type: "text/csv;charset=utf-8" });
+    const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `finsight-${result.symbols.join("-")}.csv`; link.click(); URL.revokeObjectURL(link.href);
+  }
+
+  async function exportPng() {
+    const svg = document.querySelector(".comparison-results svg") as SVGSVGElement | null;
+    if (!svg) return;
+    const source = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+    const image = new Image(); image.src = URL.createObjectURL(blob);
+    await new Promise<void>((resolve) => { image.onload = () => resolve(); image.onerror = () => resolve(); });
+    const canvas = document.createElement("canvas"); canvas.width = svg.viewBox.baseVal.width || 800; canvas.height = svg.viewBox.baseVal.height || 400;
+    canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height); URL.revokeObjectURL(image.src);
+    canvas.toBlob((png) => { if (!png) return; const link = document.createElement("a"); link.href = URL.createObjectURL(png); link.download = `finsight-${result?.symbols.join("-") ?? "comparison"}.png`; link.click(); URL.revokeObjectURL(link.href); }, "image/png");
+    setNotice("已匯出目前圖表 PNG。");
+  }
+
+  function addAlert() {
+    const symbol = selected[0];
+    if (!symbol) return;
+    const alert: ComparisonAlert = { id: crypto.randomUUID(), symbol, metric: "one_year_return", operator: "below", threshold: 0 };
+    const next = [...alerts, alert]; setAlerts(next); localStorage.setItem(COMPARISON_ALERTS_KEY, JSON.stringify(next)); setNotice(`${symbol} 已建立 1Y 報酬提醒（低於 0%）。`);
+  }
+
+  function copyShareUrl() {
+    void navigator.clipboard?.writeText(shareUrl({ symbols: selected, period, frequency, benchmark })); setNotice("已複製分享連結。");
+  }
 
   function toggle(symbol: string) {
     setSelected((current) => current.includes(symbol)
@@ -95,7 +171,12 @@ export default function ComparisonDashboard() {
         <label className="comparison-select-label">Frequency<select value={frequency} onChange={(event) => setFrequency(event.target.value)}><option value="1d">Daily</option><option value="1wk">Weekly</option><option value="1mo">Monthly</option></select></label>
         <input className="comparison-input comparison-benchmark-input" value={benchmark} onChange={(event) => setBenchmark(event.target.value.toUpperCase())} placeholder="Benchmark（選填）" aria-label="Benchmark" />
         <button className="comparison-button" type="button" onClick={() => void compare()} disabled={loading}>{loading ? "比較中" : "開始比較"}</button>
+        <button className="comparison-button secondary" type="button" onClick={saveComparison}>保存</button>
+        {saved.length > 0 && <><select className="comparison-saved-select" aria-label="載入已保存比較" value={savedId} onChange={(event) => { const item = saved.find((value) => value.id === event.target.value); if (item) loadComparison(item); }}><option value="">載入比較…</option>{saved.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><button className="comparison-button secondary" type="button" onClick={renameSaved} disabled={!savedId}>改名</button><button className="comparison-button secondary" type="button" onClick={deleteSaved} disabled={!savedId}>刪除</button></>}
       </div>
+
+      {result && <div className="comparison-actions" aria-label="比較工具"><button type="button" onClick={exportCsv}>CSV</button><button type="button" onClick={() => void exportPng()}>PNG</button><button type="button" onClick={() => window.print()}>PDF / Print</button><button type="button" onClick={copyShareUrl}>分享連結</button><button type="button" onClick={addAlert}>建立 1Y 報酬提醒</button>{matchingAlerts(result, alerts).length > 0 && <span className="comparison-alert-notice" role="status">已觸發 {matchingAlerts(result, alerts).length} 個提醒</span>}</div>}
+      {notice && <p className="comparison-notice" role="status">{notice}</p>}
 
       {error && <p className="comparison-error" role="alert">{error}</p>}
 
