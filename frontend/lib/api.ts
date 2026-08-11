@@ -221,6 +221,22 @@ export type ComparisonResponse = {
   companies: ComparisonCompany[];
 };
 
+export type BacktestResponse = {
+  symbols: string[];
+  benchmark: string | null;
+  period: string;
+  horizon_months: number;
+  rebalance: string;
+  trained_from: string | null;
+  tested_from: string | null;
+  tested_to: string | null;
+  weights: Record<string, number>;
+  train: { cagr: number | null; volatility: number | null; sharpe: number | null; maximum_drawdown: number | null; hit_rate: number | null; observations: number };
+  test: { cagr: number | null; volatility: number | null; sharpe: number | null; maximum_drawdown: number | null; hit_rate: number | null; observations: number };
+  recommendations: Array<{ symbol: string; score: number; rank: number; latest_as_of: string; features: Record<string, number | null>; label: string }>;
+  data_quality: Record<string, string | number | string[] | null>;
+};
+
 export class StockApiError extends Error {
   readonly status: number | null;
 
@@ -401,5 +417,28 @@ export async function fetchComparison(
       throw error;
     }
     throw new StockApiError("無法連線到 FinSight API，請確認後端服務已啟動。");
+  }
+}
+
+export async function fetchBacktest(
+  symbols: string[],
+  options: { period?: string; horizon?: string; benchmark?: string } = {},
+): Promise<BacktestResponse> {
+  const params = new URLSearchParams({
+    symbols: [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()))].filter(Boolean).join(","),
+    period: options.period ?? "10y",
+    horizon: options.horizon ?? "3m",
+    ...(options.benchmark ? { benchmark: options.benchmark } : {}),
+  });
+  try {
+    const response = await fetch(`${API_URL}/backtest?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { detail?: string };
+      throw new StockApiError(body.detail ?? "無法取得回測資料。", response.status);
+    }
+    return (await response.json()) as BacktestResponse;
+  } catch (error: unknown) {
+    if (error instanceof StockApiError) throw error;
+    throw new StockApiError("無法連線到 FinSight 回測 API，請確認後端服務已啟動。");
   }
 }

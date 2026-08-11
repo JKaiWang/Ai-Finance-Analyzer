@@ -12,11 +12,17 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.schemas.analytics import AnalyticsResponse
+from app.schemas.backtest import BacktestResponse
 from app.schemas.comparison import ComparisonResponse
 from app.schemas.fundamentals import FundamentalsResponse
 from app.schemas.news import NewsResponse
 from app.schemas.stock import StockResponse
 from app.services.analytics_service import get_stock_analytics
+from app.services.backtest_service import (
+    HORIZON_MONTHS,
+    MAX_BACKTEST_SYMBOLS,
+    run_backtest,
+)
 from app.services.comparison_service import get_comparison
 from app.services.fundamentals_service import get_fundamentals
 from app.services.news_service import get_news
@@ -146,6 +152,55 @@ async def compare_stocks(
     except StockDataUnavailable as exc:
         raise HTTPException(
             status_code=502, detail="Market or financial data source is unavailable."
+        ) from exc
+
+
+@app.get(
+    "/backtest",
+    response_model=BacktestResponse,
+    summary="回測並產生可解釋推薦排名",
+    description=(
+        "使用歷史月資料訓練因子權重，並在較晚期間進行 out-of-sample 回測。"
+        "結果是研究排名，不是保證報酬或投資建議。"
+    ),
+    tags=["research"],
+)
+async def backtest_stocks(
+    symbols: str = Query(description="以逗號分隔的 2–20 支股票代號。"),
+    period: Literal["5y", "10y"] = Query(default="10y"),
+    horizon: Literal["1m", "3m", "6m", "12m"] = Query(default="3m"),
+    benchmark: str | None = Query(default=None),
+    transaction_cost_bps: float = Query(default=10.0, ge=0, le=500),
+    slippage_bps: float = Query(default=5.0, ge=0, le=500),
+) -> BacktestResponse:
+    parsed = [symbol.strip().upper() for symbol in symbols.split(",") if symbol.strip()]
+    parsed = list(dict.fromkeys(parsed))
+    if len(parsed) < 2:
+        raise HTTPException(status_code=400, detail="回測至少需要兩支股票。")
+    if len(parsed) > MAX_BACKTEST_SYMBOLS:
+        raise HTTPException(
+            status_code=400, detail=f"回測一次最多 {MAX_BACKTEST_SYMBOLS} 支股票。"
+        )
+    if horizon not in HORIZON_MONTHS:
+        raise HTTPException(status_code=400, detail="Unsupported backtest horizon.")
+    try:
+        return BacktestResponse(
+            **run_backtest(
+                parsed,
+                period=period,
+                horizon=horizon,
+                benchmark=benchmark,
+                transaction_cost_bps=transaction_cost_bps,
+                slippage_bps=slippage_bps,
+            )
+        )
+    except StockNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except StockDataUnavailable as exc:
+        raise HTTPException(
+            status_code=502, detail="Market data source is unavailable."
         ) from exc
 
 

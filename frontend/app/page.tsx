@@ -5,6 +5,7 @@ import { ArrowUpRight, BarChart3, LoaderCircle, Search } from "lucide-react";
 
 import FundamentalCharts from "@/components/FundamentalCharts";
 import ComparisonDashboard from "@/components/ComparisonDashboard";
+import BacktestDashboard from "@/components/BacktestDashboard";
 import NewsTimeline from "@/components/NewsTimeline";
 import PriceChart from "@/components/PriceChart";
 import {
@@ -569,6 +570,7 @@ export default function Home() {
         </section>
 
         <ComparisonDashboard />
+        <BacktestDashboard />
 
         {isLoading && <LoadingWorkspace symbol={lastQuery} />}
         {!isLoading && error && <ErrorState message={error} onRetry={() => void runSearch(lastQuery)} />}

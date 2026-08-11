@@ -1,4 +1,3 @@
-
 # FinSight
 
 Market data, fundamentals and peer comparison in one focused investment research workspace.
@@ -121,21 +120,33 @@ process-local rate limit.
 
 ## API endpoints
 
-| Method  | Endpoint                          | Purpose                           |
-| ------- | --------------------------------- | --------------------------------- |
-| `GET` | `/`                             | Health check                      |
-| `GET` | `/stocks/{symbol}`              | Stock profile and price history   |
-| `GET` | `/stocks/{symbol}/news`         | Recent company news               |
-| `GET` | `/stocks/{symbol}/analytics`    | Quantitative analytics            |
-| `GET` | `/stocks/{symbol}/fundamentals` | Fundamental metrics               |
-| `GET` | `/compare`                      | Multi-company comparison          |
-| `GET` | `/docs`                         | Interactive OpenAPI documentation |
+| Method  | Endpoint                          | Purpose                                            |
+| ------- | --------------------------------- | -------------------------------------------------- |
+| `GET` | `/`                             | Health check                                       |
+| `GET` | `/stocks/{symbol}`              | Stock profile and price history                    |
+| `GET` | `/stocks/{symbol}/news`         | Recent company news                                |
+| `GET` | `/stocks/{symbol}/analytics`    | Quantitative analytics                             |
+| `GET` | `/stocks/{symbol}/fundamentals` | Fundamental metrics                                |
+| `GET` | `/compare`                      | Multi-company comparison                           |
+| `GET` | `/backtest`                     | Walk-forward formula backtest and research ranking |
+| `GET` | `/docs`                         | Interactive OpenAPI documentation                  |
 
 Example:
 
 ```bash
 curl "http://127.0.0.1:8000/compare?symbols=NVDA,AMD,INTC&period=5y&frequency=1d"
+
+# Train a price-based formula and evaluate it out of sample
+curl "http://127.0.0.1:8000/backtest?symbols=NVDA,AMD,INTC,AAPL,MSFT&period=10y&horizon=3m"
 ```
+
+`/backtest` uses monthly adjusted-close data, momentum, volatility, drawdown and
+available annual fundamental snapshots. Fundamental snapshots use a conservative
+90-day lag after the fiscal period; transaction cost and slippage defaults are
+15 basis points combined and can be overridden with query parameters. It trains
+a transparent factor-weight formula on an earlier period and reports later
+out-of-sample metrics. The ranking is a historical research signal, not a
+guaranteed return or personalized investment recommendation.
 
 ## Architecture
 
@@ -241,6 +252,6 @@ FinSight uses market and financial data from upstream providers through `yfinanc
 - API notes: [`docs/API.md`](./docs/API.md)
 - Changelog: [`CHANGELOG.md`](./CHANGELOG.md)
 
-## License
+## Licenseㄋㄚnji3
 
 No license has been declared yet. Add a project license before public distribution.

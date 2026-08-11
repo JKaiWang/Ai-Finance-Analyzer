@@ -880,6 +880,22 @@ h1 {
   font-size: 0.82rem;
 }
 
+.backtest-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.backtest-controls select { min-height: 40px; padding: 0 10px; background: var(--panel-raised); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
+.backtest-results { margin-top: 20px; display: grid; gap: 18px; }
+.backtest-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.backtest-metrics > div { padding: 14px; border: 1px solid var(--line); background: var(--panel-raised); }
+.backtest-metrics small, .backtest-metrics strong { display: block; }
+.backtest-metrics small { color: var(--muted); margin-bottom: 6px; }
+.backtest-metrics strong { font-size: 1.2rem; }
+.backtest-weight-list, .backtest-recommendations { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.backtest-weight-list span, .backtest-recommendations div { padding: 8px 10px; border: 1px solid var(--line); color: var(--muted); }
+.backtest-recommendations { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.backtest-recommendations strong { grid-column: 1 / -1; color: var(--text); }
+.backtest-recommendations div b, .backtest-recommendations div span { display: block; }
+.backtest-recommendations div span { margin-top: 4px; color: var(--muted); font-size: .85rem; }
+@media (max-width: 700px) { .backtest-metrics { grid-template-columns: repeat(2, 1fr); } }
+
 @media print {
   .comparison-controls,
   .comparison-actions,
